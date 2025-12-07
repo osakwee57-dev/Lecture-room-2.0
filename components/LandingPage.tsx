@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { GraduationCap, BookOpen, BrainCircuit, Users, ArrowRight, Library, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { GraduationCap, BookOpen, BrainCircuit, Users, ArrowRight, Library, Sparkles, MessageSquare, Send, CheckCircle2 } from 'lucide-react';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -8,6 +8,29 @@ interface LandingPageProps {
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
+  const [suggestion, setSuggestion] = useState("");
+  const [email, setEmail] = useState("");
+  const [submissionStatus, setSubmissionStatus] = useState<'IDLE' | 'SUBMITTING' | 'SUCCESS'>('IDLE');
+
+  const handleSuggestionSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!suggestion.trim()) return;
+    
+    setSubmissionStatus('SUBMITTING');
+    
+    // Simulate network request for the "No API" requirement
+    setTimeout(() => {
+      setSubmissionStatus('SUCCESS');
+      setSuggestion("");
+      setEmail("");
+      
+      // Reset success message after 4 seconds so they can send another if they want
+      setTimeout(() => {
+        setSubmissionStatus('IDLE');
+      }, 4000);
+    }, 1500);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 scroll-smooth">
       {/* Navigation */}
@@ -196,6 +219,65 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin 
           <button onClick={onGetStarted} className="px-10 py-5 bg-indigo-600 text-white rounded-full font-bold text-xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200">
             Get Started for Free
           </button>
+        </div>
+      </section>
+
+      {/* Suggestion / Feedback Section */}
+      <section className="py-24 bg-slate-50 border-t border-slate-200">
+        <div className="max-w-3xl mx-auto px-6 text-center">
+          <div className="mb-8">
+            <span className="inline-block p-3 rounded-full bg-purple-100 text-purple-600 mb-4">
+              <MessageSquare size={24} />
+            </span>
+            <h2 className="text-3xl font-bold mb-4 text-slate-900">Have a Suggestion?</h2>
+            <p className="text-lg text-slate-600">
+              We are constantly improving LectureRoom. Leave a comment or feature request below — we read every single one!
+            </p>
+          </div>
+
+          <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-100 relative overflow-hidden">
+            {submissionStatus === 'SUCCESS' ? (
+              <div className="py-12 flex flex-col items-center justify-center animate-fade-in-up">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-800 mb-2">Thank You!</h3>
+                <p className="text-slate-500">Your suggestion has been received.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSuggestionSubmit} className="space-y-4 text-left">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Your Email (Optional)</label>
+                  <input 
+                    type="email" 
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="student@example.com"
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-50 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Suggestion / Comment</label>
+                  <textarea 
+                    required
+                    value={suggestion}
+                    onChange={e => setSuggestion(e.target.value)}
+                    placeholder="I think it would be cool if..."
+                    rows={4}
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-4 focus:ring-purple-50 outline-none transition-all resize-none"
+                  ></textarea>
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={submissionStatus === 'SUBMITTING' || !suggestion.trim()}
+                  className="w-full py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                >
+                  {submissionStatus === 'SUBMITTING' ? 'Sending...' : 'Send Suggestion'}
+                  {!submissionStatus && <Send size={18} />}
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       </section>
 

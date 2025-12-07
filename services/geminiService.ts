@@ -3,14 +3,30 @@ import { GoogleGenAI, Type } from "@google/genai";
 import type { Schema, FunctionDeclaration } from "@google/genai";
 import { CourseOutline, Quiz, Subject, Book } from "../types";
 
-// Initialize the client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// ------------------------------------------------------------------
+// CONFIGURATION & INITIALIZATION
+// ------------------------------------------------------------------
+
+const apiKey = process.env.API_KEY;
+// Determine if we should use the real API or Mock Data
+const isMockMode = !apiKey || apiKey === "undefined" || apiKey.length < 5;
+
+if (isMockMode) {
+  console.log("%c LectureRoom Running in DEMO MODE (No API Key detected) ", "background: #6366f1; color: white; padding: 4px; border-radius: 4px;");
+}
+
+// Initialize client only if we have a key
+const ai = !isMockMode ? new GoogleGenAI({ apiKey: apiKey! }) : null;
 
 const modelName = "gemini-2.5-flash";
 const imageModelName = "gemini-2.5-flash-image";
 
+// ------------------------------------------------------------------
+// HELPER FUNCTIONS
+// ------------------------------------------------------------------
+
 /**
- * Helper function to retry API calls with exponential backoff when rate limited (429).
+ * Helper to retry API calls with exponential backoff.
  */
 async function retryWithBackoff<T>(
   fn: () => Promise<T>, 
@@ -20,7 +36,6 @@ async function retryWithBackoff<T>(
   try {
     return await fn();
   } catch (error: any) {
-    // Check for 429 or "RESOURCE_EXHAUSTED"
     const isRateLimit = 
       error?.status === 429 || 
       error?.code === 429 || 
@@ -37,14 +52,106 @@ async function retryWithBackoff<T>(
 }
 
 /**
- * Generates an educational image based on the prompt.
+ * Simulates network delay for mock responses
  */
+const mockDelay = <T>(data: T, ms = 1500): Promise<T> => {
+  return new Promise(resolve => setTimeout(() => resolve(data), ms));
+};
+
+// ------------------------------------------------------------------
+// MOCK DATA GENERATORS
+// ------------------------------------------------------------------
+
+const mockPrograms = [
+  "Computer Science", "Software Engineering", "Business Administration", 
+  "Economics", "Accounting", "Mass Communication", "Law", 
+  "Medicine and Surgery", "International Relations", "Microbiology"
+];
+
+const getMockSubjects = () => [
+  { code: "GST 101", title: "Use of English", description: "Communication skills, essay writing, and comprehension." },
+  { code: "MTH 101", title: "General Mathematics I", description: "Algebra, Trigonometry, and Coordinate Geometry." },
+  { code: "CSC 101", title: "Intro to Computer Science", description: "History of computing, binary systems, and algorithms." },
+  { code: "PHY 101", title: "General Physics I", description: "Mechanics, properties of matter, and thermal physics." },
+  { code: "CHM 101", title: "General Chemistry I", description: "Atomic structure, chemical bonding, and stoichiometry." },
+  { code: "GST 103", title: "Nigerian Peoples & Culture", description: "Study of Nigerian history, ethnic groups, and cultures." },
+];
+
+const getMockCourseOutline = (topic: string): CourseOutline => ({
+  topic,
+  title: topic,
+  description: `A comprehensive simulation course on ${topic} designed for demonstration purposes.`,
+  difficulty: "Intermediate",
+  chapters: [
+    { title: "Introduction and Fundamentals", description: "Core concepts and definitions.", durationMinutes: 45 },
+    { title: "Historical Context", description: "Evolution and history of the field.", durationMinutes: 40 },
+    { title: "Key Methodologies", description: "Standard practices and techniques.", durationMinutes: 60 },
+    { title: "Advanced Applications", description: "Real-world case studies and analysis.", durationMinutes: 55 },
+    { title: "Future Trends", description: "Emerging technologies and future outlook.", durationMinutes: 30 },
+  ]
+});
+
+const getMockChapterContent = (title: string) => `
+# ${title}
+
+## Overview
+(Demo Mode) This is a simulated chapter content for **${title}**. In a live environment with a valid API key, this section would contain a detailed, AI-generated lecture tailored to your specific university curriculum.
+
+## Core Concepts
+1. **Fundamental Principle**: Understanding the basics is crucial.
+2. **Analysis**: Breaking down complex problems into smaller parts.
+3. **Synthesis**: Combining parts to form a coherent whole.
+
+### Detailed Explanation
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+
+**Mathematical Example:**
+Consider the quadratic equation:
+$$ax^2 + bx + c = 0$$
+
+The solution is given by:
+$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$
+
+## Summary
+To wrap up, mastering **${title}** requires consistent practice and review of these simulated notes.
+`;
+
+const getMockQuiz = (topic: string, count: number): Quiz => ({
+  title: `Practice Quiz: ${topic}`,
+  questions: Array.from({ length: count }).map((_, i) => ({
+    question: `(Demo) Question ${i + 1}: What is a primary concept of ${topic}?`,
+    options: [
+      "This is a distractor option",
+      "This is the correct answer",
+      "Another wrong option",
+      "Completely unrelated option"
+    ],
+    correctAnswerIndex: 1,
+    explanation: "This is the correct answer because in this demo mode, option B is always correct for testing purposes."
+  }))
+});
+
+const mockChatResponse = {
+  text: "I am operating in Demo Mode. Since no API key was detected, I cannot generate real-time AI responses. Please configure your API key in the settings or environment variables to unlock the full power of Gemini 2.5.",
+  functionCalls: undefined
+};
+
+// ------------------------------------------------------------------
+// EXPORTED SERVICES
+// ------------------------------------------------------------------
+
 export const generateImage = async (prompt: string): Promise<string | null> => {
+  if (isMockMode || !ai) {
+    await mockDelay(null);
+    // Return a placeholder image
+    return `https://placehold.co/600x400/6366f1/ffffff?text=${encodeURIComponent(prompt.slice(0, 20))}`;
+  }
+
   return retryWithBackoff(async () => {
     try {
       const response = await ai.models.generateContent({
         model: imageModelName,
-        contents: prompt, // Use simple string prompt for content
+        contents: prompt,
       });
 
       const parts = response.candidates?.[0]?.content?.parts;
@@ -63,127 +170,101 @@ export const generateImage = async (prompt: string): Promise<string | null> => {
   });
 };
 
-/**
- * Generates a list of likely degree programs for a specific university using Google Search for accuracy.
- */
 export const generateDegreePrograms = async (universityName: string): Promise<string[]> => {
+  if (isMockMode || !ai) return mockDelay(mockPrograms);
+
   return retryWithBackoff(async () => {
     const prompt = `Find the current, comprehensive list of undergraduate degree programs offered at "${universityName}" in Nigeria.
     Return the list of courses separated by '|||'. 
     Do not number them.
     Example output: Computer Science|||Law|||Medicine and Surgery|||Accounting
     
-    Ensure you cover all major faculties (Science, Arts, Engineering, Social Sciences, etc.).`;
+    Ensure you cover all major faculties.`;
 
     try {
       const response = await ai.models.generateContent({
         model: modelName,
         contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }], 
-        },
+        config: { tools: [{ googleSearch: {} }] },
       });
 
       const text = response.text || "";
       if (!text) return [];
 
-      const programs = text.split('|||')
-        .map(p => p.trim())
-        .filter(p => p.length > 3 && !p.includes("List of"));
-
-      if (programs.length < 5) {
-        return text.split('\n')
-          .map(p => p.replace(/^\W+/, '').trim())
-          .filter(p => p.length > 5);
-      }
-
-      return programs;
+      const programs = text.split('|||').map(p => p.trim()).filter(p => p.length > 3);
+      return programs.length > 0 ? programs : mockPrograms;
     } catch (error) {
       console.error("Error generating programs:", error);
-      return ["Computer Science", "Economics", "Law", "Accounting", "Medicine", "Mass Communication", "Political Science", "Mechanical Engineering"];
+      return mockPrograms;
     }
   });
 };
 
-/**
- * Generates realistic news headlines for a specific university using Search Grounding.
- */
 export const generateUniversityNews = async (universityName: string): Promise<{headline: string, snippet: string, date: string, link: string}[]> => {
+  if (isMockMode || !ai) {
+    return mockDelay([
+      { headline: `${universityName} Announces Resumption`, snippet: "The university senate has approved the resumption date for the new academic session.", date: "2 days ago", link: "#" },
+      { headline: "Admission List Released", snippet: "The merit admission list for the 2024/2025 academic session is now available on the portal.", date: "1 week ago", link: "#" },
+      { headline: "Convocation Ceremony", snippet: "Upcoming convocation ceremony scheduled for next month at the main auditorium.", date: "3 days ago", link: "#" },
+      { headline: "Research Grant Won", snippet: "The Faculty of Science has secured a major international research grant.", date: "Yesterday", link: "#" }
+    ]);
+  }
+
   return retryWithBackoff(async () => {
     const prompt = `Find the latest 4 news updates, events, or announcements specifically for "${universityName}" in Nigeria.
-    Focus on current events (admission, exams, strikes, resumption, matriculation, convocation).
-    
-    Format the output as a list where each item is separated by '|||' and fields by '$$'.
     Format: Headline$$Date$$Snippet$$Link
-    
-    Example:
-    UNILAG Announces Resumption Date$$2 days ago$$The management has approved...$$https://unilag.edu.ng/news
-    
-    If you find a direct source, use it for the Link.`;
+    Use '|||' to separate items.`;
 
     try {
       const response = await ai.models.generateContent({
         model: modelName,
         contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-        },
+        config: { tools: [{ googleSearch: {} }] },
       });
 
       const text = response.text || "";
       const rawNews = text.split('|||');
       const newsItems: {headline: string, snippet: string, date: string, link: string}[] = [];
-
       const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-      
+
       rawNews.forEach((item, index) => {
         const parts = item.split('$$');
         if (parts.length >= 3) {
           let link = parts[3]?.trim();
           if (!link || link.length < 5) {
-            link = groundingChunks[index]?.web?.uri || `https://www.google.com/search?q=${encodeURIComponent(universityName + " news")}`;
+             link = groundingChunks[index]?.web?.uri || "#";
           }
-
           newsItems.push({
-            headline: parts[0].trim().replace(/^\W+/, ''),
+            headline: parts[0].trim(),
             date: parts[1].trim(),
             snippet: parts[2].trim(),
             link: link
           });
         }
       });
-
       return newsItems.slice(0, 4);
     } catch (error) {
-      console.error("Error generating news:", error);
       return [];
     }
   });
 };
 
 export const generateSemesterSubjects = async (program: string, level: string, universityName: string): Promise<Subject[]> => {
+  if (isMockMode || !ai) return mockDelay(getMockSubjects());
+
   return retryWithBackoff(async () => {
-    const prompt = `Find the current, standard course curriculum for a student studying "${program}" at "${level}" level at "${universityName}" (or similar Nigerian universities).
-    
-    List 8 core courses.
-    Format each course strictly as: CODE|TITLE|DESCRIPTION
-    Example: 
-    CSC 201|Computer Programming I|Introduction to C++ and algorithms.
-    
-    Do not output Markdown tables. Just lines of text separated by '|'.`;
+    const prompt = `Find the current, standard course curriculum for a student studying "${program}" at "${level}" level at "${universityName}".
+    List 8 core courses. Format: CODE|TITLE|DESCRIPTION`;
 
     try {
       const response = await ai.models.generateContent({
         model: modelName,
         contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-        },
+        config: { tools: [{ googleSearch: {} }] },
       });
 
       const text = response.text || "";
       const subjects: Subject[] = [];
-      
       const lines = text.split('\n');
       lines.forEach(line => {
         if (line.includes('|')) {
@@ -197,22 +278,16 @@ export const generateSemesterSubjects = async (program: string, level: string, u
           }
         }
       });
-
-      return subjects.slice(0, 8);
+      return subjects.length > 0 ? subjects.slice(0, 8) : getMockSubjects();
     } catch (error) {
-      console.error("Error generating subjects:", error);
-      // Fallback subjects if API fails after retries
-      return [
-        { code: "GST 101", title: "Use of English", description: "Communication skills in English." },
-        { code: "MTH 101", title: "General Mathematics", description: "Algebra and Trigonometry." },
-        { code: "GST 103", title: "Nigerian Peoples & Culture", description: "Study of Nigerian history." },
-        { code: "CSC 101", title: "Intro to Computer Science", description: "Basics of computing." }
-      ];
+      return getMockSubjects();
     }
   });
 };
 
 export const generateCourseOutline = async (subject: string, userContext: string): Promise<CourseOutline> => {
+  if (isMockMode || !ai) return mockDelay(getMockCourseOutline(subject));
+
   return retryWithBackoff(async () => {
     const schema: Schema = {
       type: Type.OBJECT,
@@ -220,7 +295,7 @@ export const generateCourseOutline = async (subject: string, userContext: string
         topic: { type: Type.STRING },
         title: { type: Type.STRING },
         description: { type: Type.STRING },
-        difficulty: { type: Type.STRING, enum: ["Beginner", "Intermediate", "Advanced"] },
+        difficulty: { type: Type.STRING },
         chapters: {
           type: Type.ARRAY,
           items: {
@@ -237,59 +312,36 @@ export const generateCourseOutline = async (subject: string, userContext: string
       required: ["topic", "title", "description", "difficulty", "chapters"],
     };
 
-    const prompt = `Create a comprehensive university-level course outline for the subject: "${subject}". 
-    Context: ${userContext}.
-    Include 5-7 distinct chapters covering the full syllabus.`;
-
+    const prompt = `Create a university course outline for: "${subject}". Context: ${userContext}.`;
+    
     const response = await ai.models.generateContent({
       model: modelName,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
-        systemInstruction: "You are an expert academic curriculum designer for a top Nigerian university.",
+        systemInstruction: "You are an expert academic curriculum designer.",
       },
     });
 
-    if (!response.text) {
-      throw new Error("No response from Gemini");
-    }
-
+    if (!response.text) throw new Error("No response");
     return JSON.parse(response.text) as CourseOutline;
   });
 };
 
 export const generateChapterContent = async (courseTitle: string, chapterTitle: string, prevContext?: string): Promise<string> => {
+  if (isMockMode || !ai) return mockDelay(getMockChapterContent(chapterTitle));
+
   return retryWithBackoff(async () => {
     const prompt = `Write the full educational content for the chapter "${chapterTitle}" of the course "${courseTitle}".
-    
-    STYLE GUIDE:
-    - Use clear, engaging, and academic language.
-    - Use Markdown formatting (headers, bolding, lists).
-    
-    SCIENTIFIC & MATHEMATICAL STANDARD FORMATS:
-    - For ALL formulas, use Unicode symbols (², ³, ½, π, √, θ, etc.).
-    - For Chemistry: Use proper subscripts for formulas (e.g., H₂O, H₂SO₄).
-    - For Math/Physics calculations:
-      **Problem:** [Statement]
-      **Given:** [List variables]
-      **Formula:** [Standard formula]
-      **Substitution:** [Plug in values]
-      **Calculation:** [Step-by-step]
-      **Final Answer:** [Result with Units]
-    
-    Context from previous chapters: ${prevContext ? prevContext : "Start of course."}`;
+    Use Markdown. Include formulas (Unicode) and examples.`;
 
     const response = await ai.models.generateContent({
       model: modelName,
       contents: prompt,
-      config: {
-        systemInstruction: "You are an expert professor. You prioritize rigorous, standard academic formatting.",
-      },
     });
 
-    if (!response.text) return "Failed to generate content.";
-    return response.text;
+    return response.text || "Failed to generate content.";
   });
 };
 
@@ -298,6 +350,8 @@ export const generateQuiz = async (topic: string): Promise<Quiz> => {
 };
 
 export const generateBatchQuiz = async (topic: string, level: string, count: number): Promise<Quiz> => {
+  if (isMockMode || !ai) return mockDelay(getMockQuiz(topic, count));
+
   return retryWithBackoff(async () => {
     const schema: Schema = {
       type: Type.OBJECT,
@@ -320,15 +374,7 @@ export const generateBatchQuiz = async (topic: string, level: string, count: num
       required: ["title", "questions"],
     };
 
-    const prompt = `Create a ${count}-question multiple choice quiz for a ${level} student about "${topic}".
-    
-    CRITICAL INSTRUCTION: You MUST generate EXACTLY ${count} questions. No more, no less.
-    
-    FORMATTING:
-    - Use Unicode for math (x², H₂O, 90°, π).
-    - Ensure chemical formulas use subscripts (CO₂, H₂SO₄).
-    
-    Questions should test deep understanding.`;
+    const prompt = `Create a ${count}-question multiple choice quiz for a ${level} student about "${topic}".`;
 
     const response = await ai.models.generateContent({
       model: modelName,
@@ -336,7 +382,6 @@ export const generateBatchQuiz = async (topic: string, level: string, count: num
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
-        systemInstruction: `You are a university examiner. You strictly follow the requested question count of ${count}.`,
       },
     });
 
@@ -346,6 +391,15 @@ export const generateBatchQuiz = async (topic: string, level: string, count: num
 };
 
 export const recommendBooks = async (program: string, level: string): Promise<Book[]> => {
+  if (isMockMode || !ai) {
+    return mockDelay([
+      { title: "Fundamentals of Modern Study", author: "Dr. A. B. Johnson", description: "A comprehensive guide to academic excellence.", link: "#" },
+      { title: "Principles of Economics", author: "N. Gregory Mankiw", description: "Standard text on micro and macroeconomics.", link: "#" },
+      { title: "Introduction to Algorithms", author: "T. Cormen", description: "Algorithms and data structures.", link: "#" },
+      { title: "Nigerian Legal System", author: "Ese Malemi", description: "Foundational text for law students.", link: "#" },
+    ]);
+  }
+
   return retryWithBackoff(async () => {
     const schema: Schema = {
       type: Type.OBJECT,
@@ -367,14 +421,8 @@ export const recommendBooks = async (program: string, level: string): Promise<Bo
       required: ["books"]
     };
 
-    const prompt = `List 10 highly recommended academic textbooks for a student studying "${program}" at "${level}".
+    const prompt = `List 10 academic textbooks for "${program}" at "${level}". Mix local Nigerian authors and international standards.`;
     
-    REQUIREMENT:
-    - Exactly 8 books MUST be by Nigerian authors or Nigerian publications (local relevance).
-    - Exactly 2 books should be standard international textbooks.
-    
-    For the 'link', provide a Google Search URL.`;
-
     try {
       const response = await ai.models.generateContent({
         model: modelName,
@@ -382,7 +430,6 @@ export const recommendBooks = async (program: string, level: string): Promise<Bo
         config: {
           responseMimeType: "application/json",
           responseSchema: schema,
-          systemInstruction: "You are a university librarian specializing in Nigerian academic resources.",
         },
       });
       
@@ -390,39 +437,32 @@ export const recommendBooks = async (program: string, level: string): Promise<Bo
       const data = JSON.parse(response.text);
       return data.books || [];
     } catch (error) {
-      console.error("Error recommending books:", error);
       return [];
     }
   });
 };
 
 export const generateBookSummary = async (title: string, author: string): Promise<string> => {
+  if (isMockMode || !ai) return mockDelay(`# Summary: ${title}\n\n(Demo Mode) This is a placeholder summary for the book **${title}** by ${author}.`);
+  
   return retryWithBackoff(async () => {
-    const prompt = `Create a comprehensive study guide for the book "${title}" by ${author}.
-    Structure: 1. Title & Author 2. Main Themes 3. Detailed Chapter Summaries 4. Key Takeaways.
-    Format cleanly with Markdown.`;
-
+    const prompt = `Create a study guide summary for "${title}" by ${author}.`;
     const response = await ai.models.generateContent({
       model: modelName,
       contents: prompt,
-      config: {
-        systemInstruction: "You are an expert academic summarizer.",
-      },
     });
-
-    return response.text || "Could not generate content.";
+    return response.text || "Could not generate summary.";
   });
 };
 
-export const processDocument = async (
-  files: { data: string; mimeType: string }[], 
-  task: 'OCR' | 'MERGE' | 'CONVERT'
-): Promise<string> => {
+export const processDocument = async (files: { data: string; mimeType: string }[], task: 'OCR' | 'MERGE' | 'CONVERT'): Promise<string> => {
+  if (isMockMode || !ai) return mockDelay("(Demo Mode) Document processed successfully. Content extracted/converted.");
+
   return retryWithBackoff(async () => {
     let prompt = "";
-    if (task === 'OCR') prompt = "Transcribe all text contained within this document exactly.";
-    else if (task === 'MERGE') prompt = "Merge these documents into a single cohesive text.";
-    else if (task === 'CONVERT') prompt = "Convert this document content into clean Markdown format.";
+    if (task === 'OCR') prompt = "Transcribe text.";
+    else if (task === 'MERGE') prompt = "Merge text.";
+    else if (task === 'CONVERT') prompt = "Convert to markdown.";
 
     const parts = [
       { text: prompt },
@@ -433,109 +473,86 @@ export const processDocument = async (
       const response = await ai.models.generateContent({
         model: modelName,
         contents: { parts },
-        config: { systemInstruction: "You are an intelligent document processing assistant." }
       });
-      return response.text || "Failed to process document.";
+      return response.text || "Failed to process.";
     } catch (error) {
-      console.error("Error processing document:", error);
       return "Error processing document.";
     }
   });
 };
 
-export const createTutorChat = () => {
-  return ai.chats.create({
-    model: modelName,
-    config: {
-      systemInstruction: `You are a Socratic tutor. Use Unicode for math symbols (x², π, √) and subscripts (H₂O).`,
-    },
-  });
-};
-
-export const createDetailedTutorChat = () => {
-  return ai.chats.create({
-    model: modelName, // Using standard model which is now multimodal
-    config: {
-      systemInstruction: `You are 'The Tutor', a highly detailed University Professor.
-      
-      YOUR ROLE:
-      - Provide comprehensive lecture notes.
-      - Solve problems with STANDARD ACADEMIC FORMATTING.
-      - If an image is provided, analyze it deeply and explain the concepts within it.
-      
-      STANDARD FORMATTING RULES:
-      1. **Chemical Formulas**: Always use subscripts (e.g., H₂O, CO₂, C₆H₁₂O₆).
-      2. **Math/Physics Problems**:
-         - **Given:** [Data]
-         - **Formula:** [Equation]
-         - **Substitution:** [Values]
-         - **Workings:** [Step-by-step]
-         - **Answer:** [Result]
-      3. **Structure**: Definitions -> Core Principles -> Detailed Explanation -> Examples.
-      
-      Use Markdown and Unicode symbols heavily for readability.`,
-    },
-  });
-};
-
-export const createGeneralChat = () => {
-  const imageTool: FunctionDeclaration = {
-    name: "generate_educational_image",
-    description: "Generates an educational image, diagram, chart, or visualization.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        prompt: { type: Type.STRING },
-      },
-      required: ["prompt"],
-    },
-  };
-
-  return ai.chats.create({
-    model: modelName,
-    config: {
-      tools: [{ functionDeclarations: [imageTool] }],
-      systemInstruction: `You are 'Professor Sadiq', a friendly Nigerian university teaching assistant.
-      FORMATTING: Use "2²" for exponents. Use "H₂O" for chemistry (subscripts). Use "½" for fractions.`,
-    },
-  });
-};
-
 export const findBooks = async (query: string): Promise<Book[]> => {
+  if (isMockMode || !ai) return recommendBooks("General", "General");
+  
   return retryWithBackoff(async () => {
-    const prompt = `Find 5 excellent academic books regarding: "${query}".
-    Format: Title$$Author$$Description|||Title$$Author$$Description`;
-
+    const prompt = `Find 5 academic books for: "${query}". Format: Title$$Author$$Description|||...`;
     try {
       const response = await ai.models.generateContent({
         model: modelName,
         contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-        },
+        config: { tools: [{ googleSearch: {} }] },
       });
-
       const text = response.text || "";
       const rawBooks = text.split('|||');
       const books: Book[] = [];
-      const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-
-      rawBooks.forEach((rb, index) => {
+      rawBooks.forEach(rb => {
         const parts = rb.split('$$');
         if (parts.length >= 3) {
           books.push({
-            title: parts[0].trim().replace(/^\W+/, ''),
+            title: parts[0].trim(),
             author: parts[1].trim(),
             description: parts[2].trim(),
-            link: groundingChunks[index]?.web?.uri || `https://www.google.com/search?q=${encodeURIComponent(parts[0].trim() + " book")}`
+            link: "#"
           });
         }
       });
-
       return books;
     } catch (error) {
-      console.error("Error finding books:", error);
       return [];
     }
+  });
+};
+
+// Mock Chat Factory
+const createMockChat = () => ({
+  sendMessage: async (msg: any) => {
+    await mockDelay(null, 1000);
+    return mockChatResponse;
+  }
+});
+
+export const createTutorChat = () => {
+  if (isMockMode || !ai) return createMockChat();
+  return ai.chats.create({
+    model: modelName,
+    config: { systemInstruction: "You are a Socratic tutor." },
+  });
+};
+
+export const createDetailedTutorChat = () => {
+  if (isMockMode || !ai) return createMockChat();
+  return ai.chats.create({
+    model: modelName,
+    config: { systemInstruction: "You are a detailed University Professor." },
+  });
+};
+
+export const createGeneralChat = () => {
+  if (isMockMode || !ai) return createMockChat();
+  const imageTool: FunctionDeclaration = {
+    name: "generate_educational_image",
+    description: "Generates an educational image.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: { prompt: { type: Type.STRING } },
+      required: ["prompt"],
+    },
+  };
+  return ai.chats.create({
+    model: modelName,
+    config: {
+      tools: [{ functionDeclarations: [imageTool] }],
+      systemInstruction: "You are a helpful assistant.",
+    },
   });
 };
