@@ -1,4 +1,5 @@
 
+
 export interface Chapter {
   title: string;
   description: string;
@@ -41,7 +42,7 @@ export interface Message {
   timestamp: number;
 }
 
-export type ViewState = 'ONBOARDING_UNI' | 'ONBOARDING_FLOW' | 'LOGIN' | 'DASHBOARD' | 'COURSE' | 'QUIZ';
+export type ViewState = 'LANDING' | 'ONBOARDING_UNI' | 'ONBOARDING_FLOW' | 'LOGIN' | 'DASHBOARD' | 'COURSE' | 'QUIZ';
 
 export interface LearningStats {
   coursesCompleted: number;

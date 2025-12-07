@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import Dashboard from './components/Dashboard';
 import CourseView from './components/CourseView';
@@ -7,12 +8,13 @@ import TutorChat from './components/TutorChat';
 import { UniversitySelection } from './components/UniversitySelection';
 import { Onboarding } from './components/Onboarding';
 import { Login } from './components/Login';
+import { LandingPage } from './components/LandingPage';
 import { generateCourseOutline } from './services/geminiService';
 import { CourseOutline, LearningStats, ViewState, UserProfile } from './types';
 import { GraduationCap, LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [view, setView] = useState<ViewState>('ONBOARDING_UNI');
+  const [view, setView] = useState<ViewState>('LANDING');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [courseData, setCourseData] = useState<CourseOutline | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -95,7 +97,7 @@ const App: React.FC = () => {
         setView('DASHBOARD');
       } else {
         // If called automatically, don't alert, just stay on landing
-        if (view !== 'ONBOARDING_UNI') {
+        if (view !== 'LANDING' && view !== 'ONBOARDING_UNI') {
            alert("No account found with this email. Please register first.");
         }
       }
@@ -107,7 +109,7 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUserProfile(null); 
     localStorage.removeItem('gemini_academy_last_user');
-    setView('ONBOARDING_UNI');
+    setView('LANDING');
   };
 
   const handleStartCourse = async (topic: string) => {
@@ -139,17 +141,22 @@ const App: React.FC = () => {
     }));
   };
 
-  // 1. Login View
-  if (view === 'LOGIN') {
-    return <Login onLogin={handleLogin} onBack={() => setView('ONBOARDING_UNI')} />;
+  // 1. Landing Page
+  if (view === 'LANDING') {
+    return <LandingPage onGetStarted={() => setView('ONBOARDING_UNI')} onLogin={() => setView('LOGIN')} />;
   }
 
-  // 2. University Selection
+  // 2. Login View
+  if (view === 'LOGIN') {
+    return <Login onLogin={handleLogin} onBack={() => setView('LANDING')} />;
+  }
+
+  // 3. University Selection
   if (view === 'ONBOARDING_UNI') {
     return <UniversitySelection onSelect={handleUniSelect} onLoginClick={() => setView('LOGIN')} />;
   }
 
-  // 3. Onboarding Wizard (Program -> Level -> Profile)
+  // 4. Onboarding Wizard (Program -> Level -> Profile)
   if (view === 'ONBOARDING_FLOW' && userProfile) {
     return (
       <Onboarding 
@@ -160,7 +167,7 @@ const App: React.FC = () => {
     );
   }
 
-  // 4. Main App Layout
+  // 5. Main App Layout
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 page-enter ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       {/* Navbar */}
